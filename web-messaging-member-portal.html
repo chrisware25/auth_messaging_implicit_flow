@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+
+  <!-- optimized meta tag -->
+  <meta name="viewport" content="user-scalable=0, width=device-width, initial-scale=1.0,  minimum-scale=1.0, maximum-scale=1.0">
+
+  <title> LE Tag Code Pack - Web Messaging</title>
+  <link rel="stylesheet" type="text/css" href="style.css">
+
+  <!-- le-mtagconfig.js must be called from every page. Please update src to match account ID accordingly -->
+  <!-- BEGIN LivePerson Monitor. -->
+  <script type="text/javascript" src="le-mtagconfig.js"></script>
+  <!-- END LivePerson Monitor. -->
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
+
+  <script type="text/javascript">
+
+  function deParam(str) {
+    return (str || document.location.search).replace(/(^\?)/,'').split("&").map(function(n){return n = n.split("="),this[n[0]] = n[1],this}.bind({}))[0];
+  }
+
+   var cnf = {
+      redirectURI: document.location.href,
+      authURI: "", // Authorisation endpoint
+      clientID: "",
+      grantType: "authorization_code", // How access will be granted
+      nonce: "LiveEngage",
+      scope: "openid", // What information to pass - LiveEngage can process standard claims & custom claims under parent lp_sdes. See https://developers.liveperson.com/mobile-sdk-and-web-authentication-detailed-api.html#openid-token-structure
+      responseType: "id_token" // Implicit flow
+    };
+
+    var hashParam = deParam(window.location.hash.substr(1));
+    var idtoken = hashParam.id_token;
+
+    window.lpGetAuthenticationToken = function (callback) {
+        if(typeof idtoken === 'undefined'){
+            console.log('idtoken undefined');
+
+        if(document.location.href.indexOf('web-messaging-member-portal.html')) {
+          document.location = document.location.href.replace('web-messaging-member-portal.html', 'web-messaging-login-page.html');
+        }
+    } else {
+        console.log("Got notification from the cb redirect tab: " + idtoken);
+          // NOTE: requires the addition of the following added to the 'lpUnifiedWindow' taglet configuration in Houston.
+          /*
+            [
+                {
+                    "id": "useOAuth2Standard",
+                    "value": "true"
+                }
+            ]
+          */
+          var payload = {
+            ssoKey: idtoken,
+            redirect_uri: document.location.href
+          };
+
+          console.log('payload: ' + JSON.stringify(payload));
+          var error;
+          if(error !== undefined) {
+              console.log("error undefined");
+              callback(payload, error);
+          } else {
+              console.log("no error");
+              callback(payload);
+          }
+        }
+    };
+
+    window.lpLogoutUser = function() {
+      document.location = document.location.href.replace('web-messaging-member-portal.html', 'web-messaging-login-page.html');
+    };
+
+ // Start Tag or not...
+ $(document).ready(function() {
+    if(typeof idtoken !== 'undefined'){
+      console.log("have id_token");
+      document.getElementById("idToken").value = idtoken;
+      console.log("idtoken: " + idtoken);
+      lpTag.section = [ "web", "messaging", "authenticated" ];
+
+      // NOTE: We are pulling apart the JWT here, but for code flow, JWE & in general this is BAD practice.
+      // The web portal should know this information VIA an API or other existing means, please read documentation below for further information.
+      var tempClaims = idtoken.split('.');
+      if(!tempClaims.length == 3) {
+        console.warn('JWT not valid, perhaps go back to login screen?');
+        return;
+      } else {
+        console.log('looks like a jwt...');
+      }
+
+      var claims = JSON.parse(atob(tempClaims[1]));
+      // NOTE: base64 decode brower support here, https://developer.mozilla.org/en-US/docs/Web/API/WindowOrWorkerGlobalScope/atob
+
+      console.log(claims);
+
+      // NOTE: Required for Authenticated web messaging on ALL pages...
+      // LP Monitoring: https://developers.liveperson.com/rt-interactions-monitoring-overview.html#terminology
+      // RFC: http://openid.net/specs/openid-connect-core-1_0.html#IDToken
+      function identityFn(callback) {
+          console.log('inside identityFn');
+          console.log('callback: ' + callback);
+          callback({
+              iss: claims.iss, // Brand issuer claim
+              acr: "loa1",
+              sub: claims.sub // Subject claim ID for customer
+          });
+      }
+
+      lpTag.identities.push(identityFn);
+
+      var toLogin = document.getElementById('toLogin');
+      toLogin.style.visibility = 'hidden';
+      var loggedIn = document.getElementById('loggedIn');
+      loggedIn.style.visibility = 'visible';
+    } else {
+      // Need to login and collect Token
+      if(document.location.href.indexOf('web-messaging-member-portal.html')) {
+        document.location = document.location.href.replace('web-messaging-member-portal.html', 'web-messaging-login-page.html');
+      }
+    }
+
+    if(lpTag.site !== undefined && lpTag.site !== '') {
+      document.getElementById("accountId").value = lpTag.site;
+      console.log("did i get the right site id? site id is currently " + lpTag.site);
+    };
+  });
+
+ </script>
+</head>
+<body>
+
+<script type="text/javascript">
+  lpTag.sdes = lpTag.sdes||[];  //Always include the declaration of the SDE's array.
+  lpTag.identities = lpTag.identities||[]; // NOTE: Required for authenticated web messaging or earlier.
+</script>
+
+<div id="loginBox">
+    <p><img src="logo.png"></img></p>
+    <div id="toLogin">
+        <p>Account ID:</p>
+        <input type="text" id="accountId"></input>
+    </div?>
+    <div id="loggedIn">
+        <center>
+            <img src="padlock.png"></img>
+            <p>Logged in</p>
+            <input id="loginButton" type="button" value="Logout" onclick="lpLogoutUser();"><br />
+            <div>
+              <p>ID Token / Code</p>
+              <TextArea id="idToken"></TextArea>
+            </div>
+        </center>
+    </div>
+</div>
+</body>
+</html>
